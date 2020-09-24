@@ -14,7 +14,7 @@ export class AppsyncCdkAppStack extends cdk.Stack {
         defaultAuthorization: {
           authorizationType: appsync.AuthorizationType.API_KEY,
           apiKeyConfig: {
-            expires: cdk.Expiration.atTimestamp(1631579248000)
+            expires: cdk.Expiration.after(cdk.Duration.days(365))
           }
         },
       },
@@ -26,16 +26,27 @@ export class AppsyncCdkAppStack extends cdk.Stack {
      value: api.graphqlUrl
     });
 
+    // print out the AppSync API Key to the terminal
+    new cdk.CfnOutput(this, "GraphQLAPIKey", {
+      value: api.apiKey || ''
+    });
+
+    // print out the stack region
+    new cdk.CfnOutput(this, "Stack Region", {
+      value: this.region
+    });
+
     const notesLambda = new lambda.Function(this, 'AppSyncNotesHandler', {
       runtime: lambda.Runtime.NODEJS_12_X,
       handler: 'appsync-ds-main.handler',
       code: lambda.Code.fromAsset('lambda-fns'),
+      memorySize: 1024
     });
     
-    // Set the new Lambda function as a data source for the AppSync API
+    // set the new Lambda function as a data source for the AppSync API
     const lambdaDs = api.addLambdaDataSource('lambdaDatasource', notesLambda);
 
-    // lib/appsync-cdk-app-stack.ts
+    // create resolvers to match GraphQL operations in schema
     lambdaDs.createResolver({
       typeName: "Query",
       fieldName: "getNoteById"
@@ -61,6 +72,7 @@ export class AppsyncCdkAppStack extends cdk.Stack {
       fieldName: "updateNote"
     });
 
+    // create DynamoDB table
     const notesTable = new ddb.Table(this, 'CDKNotesTable', {
       billingMode: ddb.BillingMode.PAY_PER_REQUEST,
       partitionKey: {
@@ -68,6 +80,7 @@ export class AppsyncCdkAppStack extends cdk.Stack {
         type: ddb.AttributeType.STRING,
       },
     });
+
     // enable the Lambda function to access the DynamoDB table (using IAM)
     notesTable.grantFullAccess(notesLambda)
     
